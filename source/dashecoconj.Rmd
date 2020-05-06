@@ -1,0 +1,417 @@
+---
+title: "Données économiques"
+author: "Hamza ABADI"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    logo: monitor.png
+    favicon: monitor.png
+
+    
+---
+
+```{r setup, include=FALSE}
+library(rwebstat)
+library(plotly)
+library(flexdashboard)
+library(plyr)
+library(ggplot2)
+library(DT)
+library(rsdmx)
+library(zoo)
+library(rvest)
+#Enregistrement du client ID
+webstat_client_ID <- "540e854c-8731-41fa-a459-7b2e33138d88"
+#Conjoncture éco
+##PIB
+url_PIB_insee <- "https://bdm.insee.fr/series/sdmx/data/SERIES_BDM/010548503?startPeriod=2000"
+PIB_sdmx <- readSDMX(url_PIB_insee)
+dPIB <- as.data.frame(PIB_sdmx)
+dPIB = dPIB[c("TIME_PERIOD","OBS_VALUE")]
+##Inflation
+url_IPC_insee <- "https://bdm.insee.fr/series/sdmx/data/SERIES_BDM/001768619?startPeriod=2000"
+IPC_sdmx <- readSDMX(url_IPC_insee)
+dIPC <- as.data.frame(IPC_sdmx)
+dIPC = dIPC[c("TIME_PERIOD","OBS_VALUE")]
+dIPC$TIME_PERIOD <- as.yearmon(dIPC$TIME_PERIOD)
+##Chômage
+url_cho_insee <- "https://bdm.insee.fr/series/sdmx/data/SERIES_BDM/001688526?startPeriod=2000"
+cho_sdmx <- readSDMX(url_cho_insee)
+dCHO <- as.data.frame(cho_sdmx)
+dCHOtab <- dCHO
+dCHOtab = dCHOtab[c("TIME_PERIOD","OBS_VALUE")]
+dCHO = dCHO[c("TIME_PERIOD","OBS_VALUE")]
+dCHO$OBS_VALUE <- as.numeric(dCHO$OBS_VALUE)
+dCHO$TIME_PERIOD <- as.yearqtr(dCHO$TIME_PERIOD, format = "%Y-Q%q")
+
+#Marchés financiers
+## Indice CAC 40
+CAC40 <- w_data(dataset_name = "ECOFI", series_name = "SPI.FR.FPE_IX._Z.D",  lastNObs = 5000,  language = "fr")
+
+#CAC 40 VIX (VCAC)
+VCAC <- read_html("https://fr.investing.com/indices/cac-40-vix-historical-data")
+tVCAC <- html_table(VCAC, fill = TRUE) #Parses tables into data frames
+tVCAC <- tVCAC[[1]]
+tVCAC$Date <-as.Date(tVCAC$Date, format="%d/%m/%Y")
+# S?lectionnez un sous-ensemble de colonnes
+tVCAC <- select(
+  .data = tVCAC, 
+  "Date",
+  "Dernier",
+  "Variation %")
+#SP500
+SP500 <- read_html("https://fr.investing.com/indices/us-spx-500-historical-data")
+tSP500 <- html_table(SP500, fill = TRUE) #Parses tables into data frames
+tSP500 <- tSP500[[2]]
+tSP500$Date <-as.Date(tSP500$Date, format="%d/%m/%Y")
+# S?lectionnez un sous-ensemble de colonnes
+tVCAC <- select(
+  .data = tVCAC, 
+  "Date",
+  "Dernier",
+  "Variation %")
+
+#IMMOBILIER
+##Indices des prix des logements anciens, Ensemble des logements, France métropolitaine
+immo_p_ancien <- w_data(dataset_name = "RPP", series_name = "Q.FR.N.ED.00.1.00",  lastNObs = 48,  language = "fr")
+##Prix de vente moyen d'une maison neuve, France entière
+immo_p_neuf <- w_data(dataset_name = "RPP", series_name = "Q.FR.N.NH.00.1.00",  lastNObs = 48,  language = "fr")
+##Crédits nouveaux à l'habitat des particuliers, flux CVS
+immo_cred <- w_data(dataset_name = "MIR1", series_name = "M.FR.B.A22.A.5.A.2254U6.EUR.N",  lastNObs = 150,  language = "fr")
+
+
+```
+Conjoncture économique
+=======================================================================
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Insee
+
+```{r}
+articles <- "Produit intérieur brut"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Produit intérieur brut
+
+```{r}
+PIBp <- ggplot(data=dPIB, aes(x = TIME_PERIOD, y = OBS_VALUE, group = 1)) +
+  geom_line() +
+
+  labs(x="Date", y = "Pourcentage de croissance")
+PIBp 
+ggplotly(PIBp)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  dPIB, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Insee
+
+```{r}
+articles <- "Indice des prix à la consommation"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Indice des prix à la consommation (mensuel)
+
+```{r}
+IPCp <- ggplot(data=dIPC, aes(x = TIME_PERIOD, y = OBS_VALUE, group = 1)) +
+  geom_line() +
+
+  labs(x="Date", y = "Variations mensuelles (%)")
+IPCp 
+ggplotly(IPCp)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  dIPC, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Insee
+
+```{r}
+articles <- "Taux de chômage"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Taux de chômage
+
+```{r}
+CHOp <- ggplot(data=dCHO, aes(x = TIME_PERIOD, y = OBS_VALUE, group = 1)) +
+  geom_line() +
+
+  labs(x="Date", y = "Taux de chômage (%)")
+CHOp 
+ggplotly(CHOp)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  dCHOtab, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+)
+
+```
+
+Marchés financiers
+=======================================================================
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Banque de France
+
+```{r}
+articles <- "Indice CAC 40"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Indice CAC40
+
+```{r}
+CAC40p <- ggplot(data=CAC40, aes(x = date, y = ECOFI.SPI.FR.FPE_IX._Z.D)) +
+  geom_line() +
+
+  labs(x="Date", y = "Valeur")
+CAC40p 
+ggplotly(CAC40p)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  CAC40, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Investing
+
+```{r}
+articles <- "CAC 40 Volatity Index (VCAC)"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Indice CAC40
+
+```{r}
+VCACp <- ggplot(data=tVCAC, aes(x = Date, y = Dernier, group = 1)) +
+  geom_line() +
+
+  labs(x="Date", y = "Valeur de clôture de l'indice")
+VCACp 
+ggplotly(VCACp)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  tVCAC, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Investing
+
+```{r}
+articles <- "Indice SP 500"
+valueBox(articles)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Indice SP 500
+
+```{r}
+SP500p <- ggplot(data=tSP500, aes(x = Date, y = Dernier, group = 1)) +
+  geom_line() +
+
+  labs(x="Date", y = "Valeur de clôture")
+SP500p 
+ggplotly(SP500p)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  tSP500, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Habitation
+=======================================================================
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Banque de France
+
+```{r}
+articles <- "Indices des prix des logements anciens"
+valueBox(articles)
+```
+
+Row 
+-----------------------------------------------------------------------
+
+### Indices des prix des logements anciens, Ensemble des logements, France métropolitaine
+
+```{r}
+immo_p_ancienp <- ggplot(data=immo_p_ancien, aes(x = date, y = RPP.Q.FR.N.ED.00.1.00)) +
+  geom_line() +
+
+  labs(x="Date", y = "Millions d'euros")
+immo_p_ancienp 
+ggplotly(immo_p_ancienp)
+```
+
+
+### Tableau
+
+```{r}
+datatable(
+  immo_p_ancien, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Banque de France
+
+```{r}
+articles2 <- "Prix de vente moyen d'une maison neuve"
+valueBox(articles2)
+```
+
+
+Row
+-----------------------------------------------------------------------
+
+### Prix de vente moyen d'une maison neuve
+
+```{r}
+immo_p_neufp <- ggplot(data=immo_p_neuf, aes(x = date, y = RPP.Q.FR.N.NH.00.1.00)) +
+  geom_line() +
+  
+  labs(x="Date", y = "Millions d'euros")
+immo_p_neufp 
+ggplotly(immo_p_neufp)
+```
+
+### Tableau
+
+```{r}
+datatable(
+  immo_p_neuf, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    colnames=c("date", "Prix (K€)"),
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+```
+
+Row {data-height=100}
+-----------------------------------------------------------------------
+### Source : Banque de France
+
+```{r}
+articles3 <- "Crédits nouveaux à l'habitat des particuliers"
+valueBox(articles3)
+```
+
+
+Row
+-----------------------------------------------------------------------
+
+### Crédits nouveaux à l'habitat des particuliers
+
+```{r}
+immo_credp <- ggplot(data=immo_cred, aes(x = date, y = MIR1.M.FR.B.A22.A.5.A.2254U6.EUR.N)) +
+  geom_line() +
+
+  labs(x="Date", y = "Millions d'euros")
+immo_credp 
+ggplotly(immo_credp)
+```
+
+
+### Tableau
+
+```{r}
+datatable(
+  immo_cred, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+) %>%
+  formatDate(1, method = 'toLocaleDateString', params = list('fr-FR'))
+
+```
+
